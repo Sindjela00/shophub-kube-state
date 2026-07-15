@@ -1,0 +1,3 @@
+# TODO: cluster metadata (name, distribution: minikube|kind|k3s, kube context, etc.)
+name: local
+distribution: minikube
