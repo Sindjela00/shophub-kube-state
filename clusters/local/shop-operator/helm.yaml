@@ -1,3 +1,8 @@
-# TODO: OCI chart reference + version, e.g.
-# chart: oci://registry.example.com/helm-charts/shop-operator
-# version: 0.1.0
+# No chart registry (OCI or classic Helm repo) is published for shophub-helm-charts yet —
+# that repo's "Repo & branch governance" work explicitly deferred choosing one (chart repo vs
+# OCI registry isn't decided). Until that exists, this points at a local checkout of
+# shophub-helm-charts sitting next to this repo — the same layout this whole state was
+# developed and verified against. Update to a real chart:/version: reference once shophub-
+# helm-charts actually publishes somewhere.
+chart: ../../../shophub-helm-charts/charts/shop-operator
+version: 0.1.0

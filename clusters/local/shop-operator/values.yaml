@@ -1,1 +1,9 @@
-# TODO: value overrides for the shop-operator chart on this cluster.
+# Overrides on top of the chart's own defaults (image, resources, RBAC, CRD install — see
+# shophub-helm-charts/charts/shop-operator/values.yaml for what those already are; no need to
+# repeat them here).
+
+discord:
+  # The real bot token/guild ID are never committed here. Create the secret out-of-band first:
+  #   kubectl create secret generic shop-operator-discord -n shops \
+  #     --from-literal=DISCORD_BOT_TOKEN=<token> --from-literal=DISCORD_GUILD_ID=<guild-id>
+  existingSecret: shop-operator-discord

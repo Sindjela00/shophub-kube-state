@@ -1,3 +1,11 @@
-# TODO: cluster metadata (name, distribution: minikube|kind|k3s, kube context, etc.)
+# Metadata for the local cluster this directory's releases are applied to. Nothing reads this
+# programmatically yet (no GitOps controller is wired up — see the "(Optional) GitOps
+# integration" issue); it's descriptive today, and the anchor point once one is.
 name: local
-distribution: minikube
+distribution: docker-desktop
+kubeContext: docker-desktop
+
+# Everything under clusters/local was developed and verified against Docker Desktop's
+# built-in single-node Kubernetes (Settings -> Kubernetes -> Enable Kubernetes). minikube/kind/
+# k3s work identically for everything in this repo — nothing here is Docker-Desktop-specific —
+# just point kubeContext at whichever you're actually running and update distribution to match.
