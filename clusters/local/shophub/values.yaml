@@ -1,1 +1,18 @@
-# TODO: value overrides for the shophub chart on this cluster.
+# Overrides on top of the chart's own defaults (see
+# shophub-helm-charts/charts/shophub/values.yaml for what those already are).
+
+database:
+  # Real connection string is never committed here. Create the secret out-of-band first:
+  #   kubectl create secret generic shophub-database -n shophub \
+  #     --from-literal=ConnectionString="Host=...;Database=...;Username=...;Password=..."
+  existingSecret: shophub-database
+
+jwt:
+  # Same reasoning as database.existingSecret above.
+  #   kubectl create secret generic shophub-jwt -n shophub \
+  #     --from-literal=SigningKey=<a real random key>
+  existingSecret: shophub-jwt
+
+# kube-prometheus-stack.enabled is left unset here (chart default: true) — sizing/retention/
+# alerting configuration for it is pinned separately once the "Observability: deploy metrics
+# stack" work lands, so this file doesn't get rewritten by every observability PR after this one.
