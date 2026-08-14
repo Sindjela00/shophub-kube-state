@@ -59,6 +59,33 @@ kube-prometheus-stack:
         cpu: 50m
         memory: 128Mi
 
+    # Access control (spec 4.1: "only maintainers who maintain the applications have access
+    # to Grafana; ShopHub users have no access to the Grafana dashboard"). Both settings below
+    # already match the chart's own defaults — pinned explicitly here rather than left
+    # implicit, since access control is exactly the kind of thing that shouldn't silently
+    # change if an upstream chart default ever does.
+    #
+    # No Ingress (ingress.enabled: false, chart default) means Grafana has no route reachable
+    # from outside the cluster at all — the only way in today is `kubectl port-forward`, which
+    # requires cluster access. ShopHub users only ever interact with the shophub/shophub-shop
+    # apps' own APIs (separate auth system entirely — a ShopHub JWT means nothing to Grafana,
+    # there's no shared identity provider), so "maintainers only" and "ShopHub users have no
+    # access" both hold by construction, not by anything actively blocking a ShopHub user
+    # specifically. Verified for real: an unauthenticated request to Grafana's API is rejected
+    # (401), and the admin credential is only readable via `kubectl get secret` (cluster
+    # access required) — see this PR's description.
+    ingress:
+      enabled: false
+    grafana.ini:
+      auth.anonymous:
+        enabled: false
+
+    # The "Optional" half of spec 4.1 — letting a ShopHub user reach *only* their own shop's
+    # Grafana dashboard — isn't implemented. It needs a real identity bridge between shophub-
+    # app's JWT auth and Grafana's own (OAuth proxy or similar, plus per-shop
+    # folders/permissions), which is a meaningfully bigger integration than this repo's job of
+    # pinning chart values — flagging it rather than half-building it.
+
   # Docker Desktop's Kubernetes VM doesn't mark its root filesystem mount "shared"/"rslave",
   # which node-exporter's default HostToContainer propagation requires — without this, every
   # node-exporter pod CrashLoopBackOffs with "path / is mounted on / but it is not a shared or
