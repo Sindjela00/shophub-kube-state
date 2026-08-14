@@ -13,6 +13,59 @@ jwt:
   #     --from-literal=SigningKey=<a real random key>
   existingSecret: shophub-jwt
 
-# kube-prometheus-stack.enabled is left unset here (chart default: true) — sizing/retention/
-# alerting configuration for it is pinned separately once the "Observability: deploy metrics
-# stack" work lands, so this file doesn't get rewritten by every observability PR after this one.
+# kube-prometheus-stack.enabled is left unset (chart default: true).
+#
+# Cluster-level dashboards and alert rules (the "Observability: cluster-level dashboard" and
+# "... cluster-level alert rules" issues) aren't hand-built here — kube-prometheus-stack
+# ships them out of the box, on by default (grafana.defaultDashboardsEnabled,
+# defaultRules.create), and reinventing well-established kubernetes-mixin dashboards/rules
+# would just be a worse copy of what's already there. Concretely, out of the box this already
+# provides:
+#   - Dashboards: "Kubernetes / Compute Resources / Cluster" and ".../Node (Pods)" (CPU, RAM,
+#     filesystem), "Node Exporter / Nodes" and ".../USE Method" (CPU, RAM, filesystem, network
+#     per node) — verified present via Grafana's own dashboard search API after a real install,
+#     not just assumed from the chart's docs.
+#   - Alert rules: the `node` and `kubernetesResources` default rule groups (NodeFilesystem-
+#     AlmostOutOfSpace, NodeMemoryHighUtilization, KubeCPUOvercommit, KubeMemoryOvercommit,
+#     KubeNodeNotReady, KubeNodeUnreachable, etc.) — exactly "resource exhaustion, node health"
+#     per that issue's own wording. defaultRules.rules.* all default to true; nothing to
+#     enable here.
+#
+# What *is* overridden below is sizing — the chart's own defaults assume enough headroom for
+# a real cluster, which a single-node local dev cluster doesn't have.
+kube-prometheus-stack:
+  prometheus:
+    prometheusSpec:
+      retention: 6h
+      resources:
+        requests:
+          cpu: 100m
+          memory: 400Mi
+
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+
+  grafana:
+    # Ephemeral local dev cluster — dashboards/rules are all provisioned from the chart on
+    # every install anyway, nothing user-created is worth persisting here.
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+  # Docker Desktop's Kubernetes VM doesn't mark its root filesystem mount "shared"/"rslave",
+  # which node-exporter's default HostToContainer propagation requires — without this, every
+  # node-exporter pod CrashLoopBackOffs with "path / is mounted on / but it is not a shared or
+  # slave mount" (hit this for real bringing the stack up). minikube/kind/k3s and real cluster
+  # nodes don't have this problem; this override is specifically for docker-desktop
+  # (cluster.yaml's distribution) and only affects the filesystem-usage metrics node-exporter
+  # reads from the host's root mount — CPU/RAM/network (from /proc, /sys) are unaffected.
+  prometheus-node-exporter:
+    hostRootFsMount:
+      mountPropagation: None
