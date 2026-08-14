@@ -86,6 +86,163 @@ kube-prometheus-stack:
     # folders/permissions), which is a meaningfully bigger integration than this repo's job of
     # pinning chart values — flagging it rather than half-building it.
 
+    # The per-shop dashboard ("Observability: per-shop Grafana dashboard"): one dashboard,
+    # templated by a $shop variable populated from live Prometheus data (kube_pod_labels),
+    # rather than one literal dashboard file generated per shop — functionally the same "pick
+    # a shop, see its panels" outcome, without needing anything to regenerate dashboard JSON as
+    # shops come and go. Picked up automatically by the sidecar enabled below.
+    dashboards:
+      shophub:
+        shophub-shop:
+          json: |
+            {
+              "uid": "shophub-shop",
+              "title": "ShopHub / Per-Shop Overview",
+              "tags": ["shophub"],
+              "timezone": "browser",
+              "schemaVersion": 39,
+              "version": 1,
+              "refresh": "30s",
+              "time": { "from": "now-24h", "to": "now" },
+              "templating": {
+                "list": [
+                  {
+                    "name": "shop",
+                    "type": "query",
+                    "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                    "query": "label_values(kube_pod_labels{namespace=\"shops\"}, label_app_kubernetes_io_instance)",
+                    "refresh": 2,
+                    "includeAll": false,
+                    "multi": false,
+                    "sort": 1
+                  }
+                ]
+              },
+              "panels": [
+                {
+                  "id": 1, "type": "timeseries", "title": "CPU Usage",
+                  "gridPos": { "x": 0, "y": 0, "w": 6, "h": 8 },
+                  "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"shops\", container!=\"\", container!=\"POD\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "cores"
+                    }
+                  ]
+                },
+                {
+                  "id": 2, "type": "timeseries", "title": "Memory Usage",
+                  "gridPos": { "x": 6, "y": 0, "w": 6, "h": 8 },
+                  "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(container_memory_working_set_bytes{namespace=\"shops\", container!=\"\", container!=\"POD\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "working set"
+                    }
+                  ]
+                },
+                {
+                  "id": 3, "type": "timeseries", "title": "Filesystem Usage",
+                  "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+                  "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(container_fs_usage_bytes{namespace=\"shops\", container!=\"\", container!=\"POD\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "used"
+                    }
+                  ]
+                },
+                {
+                  "id": 4, "type": "timeseries", "title": "Network I/O",
+                  "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+                  "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "receive"
+                    },
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "transmit"
+                    }
+                  ]
+                },
+                {
+                  "id": 5, "type": "stat", "title": "Total Requests (24h)",
+                  "gridPos": { "x": 0, "y": 8, "w": 4, "h": 4 },
+                  "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\"}[24h]))"
+                    }
+                  ]
+                },
+                {
+                  "id": 6, "type": "stat", "title": "Successful Requests (24h)",
+                  "gridPos": { "x": 4, "y": 8, "w": 4, "h": 4 },
+                  "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=~\"2..\"}[24h]))"
+                    }
+                  ]
+                },
+                {
+                  "id": 7, "type": "stat", "title": "Failed Requests (24h)",
+                  "gridPos": { "x": 8, "y": 8, "w": 4, "h": 4 },
+                  "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=~\"4..|5..\"}[24h]))"
+                    }
+                  ]
+                },
+                {
+                  "id": 8, "type": "stat", "title": "Unique Visitors Today",
+                  "gridPos": { "x": 12, "y": 8, "w": 4, "h": 4 },
+                  "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "max(http_traffic_unique_visitors_today{namespace=\"shops\", service=\"$shop\"})"
+                    }
+                  ]
+                },
+                {
+                  "id": 9, "type": "stat", "title": "Total Traffic (24h)",
+                  "gridPos": { "x": 16, "y": 8, "w": 8, "h": 4 },
+                  "fieldConfig": { "defaults": { "unit": "decgbytes" }, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(increase(http_traffic_request_bytes_total{namespace=\"shops\", service=\"$shop\"}[24h]) + increase(http_traffic_response_bytes_total{namespace=\"shops\", service=\"$shop\"}[24h])) / 1e9"
+                    }
+                  ]
+                },
+                {
+                  "id": 10, "type": "table", "title": "404s by Endpoint (24h)",
+                  "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+                  "fieldConfig": { "defaults": {}, "overrides": [] },
+                  "targets": [
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum by (http_route) (increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=\"404\"}[24h]))",
+                      "format": "table",
+                      "instant": true
+                    }
+                  ]
+                }
+              ]
+            }
+
   # Docker Desktop's Kubernetes VM doesn't mark its root filesystem mount "shared"/"rslave",
   # which node-exporter's default HostToContainer propagation requires — without this, every
   # node-exporter pod CrashLoopBackOffs with "path / is mounted on / but it is not a shared or
@@ -96,3 +253,112 @@ kube-prometheus-stack:
   prometheus-node-exporter:
     hostRootFsMount:
       mountPropagation: None
+
+  # --- Per-shop observability ("Observability: per-shop Grafana dashboard" / "... alerting") ---
+  #
+  # Every Shop app is its own Deployment+Service in the `shops` namespace (shophub-shop-operator's
+  # Shop controller), named after the owning Shop CR (spec.name is the display name; the CR's own
+  # metadata.name — e.g. "shop-<uuid>" — is what actually labels/names the Deployment, Service,
+  # and pods: `app.kubernetes.io/instance: <shop CR name>`, Service name == Deployment name ==
+  # that same CR name). The ServiceMonitor below scrapes every shop's `/metrics` through that one
+  # shared `app.kubernetes.io/name: shophub-shop` selector, so Prometheus discovers new shops
+  # automatically — no per-shop config needed here. It's placed under `extraManifests` (not the
+  # shop-operator chart) so it only ever gets created once the ServiceMonitor CRD actually exists
+  # (this release brings it); shop-operator installs first per BOOTSTRAP.md and has no dependency
+  # on kube-prometheus-stack being present at all.
+  extraManifests:
+    - apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: shophub-shops
+        namespace: shophub
+        # kube-prometheus-stack's Prometheus CR is rendered with
+        # serviceMonitorSelector: {matchLabels: {release: shophub}} (from
+        # serviceMonitorSelectorNilUsesHelmValues) rather than the chart's own documented "{}
+        # selects everything" default — confirmed against the actual deployed Prometheus CR,
+        # not just the chart's values.yaml. additionalPrometheusRulesMap-generated
+        # PrometheusRules get this label automatically; a raw extraManifests object like this
+        # one doesn't, so it has to be set explicitly or Prometheus silently never scrapes it.
+        labels:
+          release: shophub
+      spec:
+        namespaceSelector:
+          matchNames:
+            - shops
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: shophub-shop
+        endpoints:
+          - port: http
+            path: /metrics
+            interval: 30s
+
+    # One real, working example of alert-to-Discord routing for a single shop, wired to the
+    # webhook Secret shophub-shop-operator's DiscordChannel controller creates
+    # (`<DiscordChannel CR name>-discord-webhook`, key `webhookUrl` — same name as the owning
+    # Shop CR, see above). AlertmanagerConfig objects are inherently per-receiver/per-secret, so
+    # this can't be made to cover arbitrary future shops without something watching
+    # Shop/DiscordChannel resources and generating one of these per shop — a real but
+    # meaningfully bigger feature (effectively a small controller) that's out of scope here.
+    #
+    # To route another shop's alerts to its own channel: copy this whole object, replace every
+    # "example-shop" below with that shop's actual CR name, and apply. Both webhookConfigs
+    # `apiURL.name` and the route's `service` matcher must use that same name.
+    - apiVersion: monitoring.coreos.com/v1alpha1
+      kind: AlertmanagerConfig
+      metadata:
+        name: example-shop-discord-routing
+        namespace: shops
+      spec:
+        route:
+          receiver: example-shop-discord
+          matchers:
+            - name: service
+              value: example-shop
+              matchType: "="
+        receivers:
+          - name: example-shop-discord
+            discordConfigs:
+              - apiURL:
+                  name: example-shop-discord-webhook
+                  key: webhookUrl
+
+  # Alert rules are the mirror image of the routing above: these ARE genuinely N-shop-scalable
+  # without enumeration, since Prometheus groups `by (service)` — a distinct alert fires per shop
+  # automatically as new shops start getting scraped. Only the *routing* to Discord (above) needs
+  # a per-shop object; these rules don't.
+  additionalPrometheusRulesMap:
+    shophub-shop-alerts:
+      groups:
+        - name: shophub-shop-alerts
+          rules:
+            - alert: ShopTargetDown
+              expr: up{namespace="shops", job=~".*shophub-shops.*"} == 0
+              for: 5m
+              labels:
+                severity: critical
+              annotations:
+                summary: "Shop {{ $labels.service }} is unreachable"
+                description: "Prometheus has been unable to scrape shop '{{ $labels.service }}' for 5 minutes."
+            - alert: ShopHighErrorRate
+              expr: |
+                (
+                  sum by (service) (increase(http_server_request_duration_seconds_count{namespace="shops", http_response_status_code=~"5.."}[15m]))
+                  /
+                  sum by (service) (increase(http_server_request_duration_seconds_count{namespace="shops"}[15m]))
+                ) > 0.05
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                summary: "Shop {{ $labels.service }} has an elevated error rate"
+                description: "More than 5% of requests to shop '{{ $labels.service }}' returned a 5xx status over the last 15 minutes."
+            - alert: ShopHighLatency
+              expr: |
+                histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket{namespace="shops"}[5m]))) > 1
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                summary: "Shop {{ $labels.service }} has high request latency"
+                description: "The 95th percentile request duration for shop '{{ $labels.service }}' has been above 1s for 10 minutes."
