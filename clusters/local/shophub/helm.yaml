@@ -1,3 +1,4 @@
-# TODO: OCI chart reference + version, e.g.
-# chart: oci://registry.example.com/helm-charts/shophub
-# version: 0.1.0
+# See shop-operator/helm.yaml in this same clusters/local/ directory for why this is a local
+# path instead of a real chart registry reference.
+chart: ../../../shophub-helm-charts/charts/shophub
+version: 0.1.0
