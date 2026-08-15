@@ -110,7 +110,57 @@ curl -X POST http://localhost:8080/api/auth/register \
 # expect HTTP 201 with a JWT
 ```
 
-## 5. Tear down
+## 5. Scoped Grafana access per user
+
+Only needed if you installed with the observability stack on (dropped
+`--set kube-prometheus-stack.enabled=false` from step 4). Grafana's `[auth.proxy]` (see
+`clusters/local/shophub/values.yaml`'s comments) needs an org dedicated to ShopHub end users
+and a service account scoped to it — neither can be created declaratively (Grafana has no API
+for "provision this at install time" the way a chart value can), so this is a one-time manual
+step per cluster, same spirit as the database/JWT secrets in step 2.
+
+```bash
+# The chart sets a random admin password unless overridden — read the real one out.
+GRAFANA_ADMIN_PASSWORD=$(kubectl get secret shophub-grafana -n shophub \
+  -o jsonpath='{.data.admin-password}' | base64 -d)
+
+kubectl port-forward -n shophub svc/shophub-grafana 3000:80 &
+
+# Create the org kube-prometheus-stack.grafana.grafana.ini's [auth.proxy] users land in
+# (must match grafana.usersOrgName in clusters/local/shophub/values.yaml, default
+# "ShopHub Users") and a service account scoped to it.
+ORG_ID=$(curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/orgs \
+  -H "Content-Type: application/json" -d '{"name":"ShopHub Users"}' | jq -r .orgId)
+curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST "http://localhost:3000/api/user/using/$ORG_ID"
+SA_ID=$(curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/serviceaccounts \
+  -H "Content-Type: application/json" \
+  -d '{"name":"shophub-backend","role":"Admin"}' | jq -r .id)
+# Admin org role, not Editor: GrafanaProvisioningService's folder permission grants replace a
+# folder's whole ACL down to just the shop's owner, which also revokes the *creating*
+# service account's own implicit access to it — Editor can no longer delete what it created
+# once that happens. Org Admin bypasses per-folder ACLs entirely, so deprovisioning still
+# works. (Confirmed by hitting exactly this as a real 403 with an Editor-role SA.)
+SA_TOKEN=$(curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" \
+  -X POST "http://localhost:3000/api/serviceaccounts/$SA_ID/tokens" \
+  -H "Content-Type: application/json" -d '{"name":"shophub-backend-token"}' | jq -r .key)
+
+kubectl create secret generic shophub-grafana-provisioning -n shophub \
+  --from-literal=AdminUser=admin \
+  --from-literal=AdminPassword="$GRAFANA_ADMIN_PASSWORD" \
+  --from-literal=ServiceAccountToken="$SA_TOKEN"
+
+# shophub-app's pod needed this secret to exist before it could start (Grafana__* env vars
+# are wired via secretKeyRef) — it's likely sitting in CreateContainerConfigError until now.
+kubectl rollout restart deployment/shophub -n shophub
+```
+
+Verify: register/log in through the app, create a shop site, then `GET
+/api/shop-sites/{id}/dashboard-link` (authenticated) and open the URL it returns — expect a
+real Grafana dashboard for that shop, scoped to just its own folder. See
+`clusters/local/shophub/values.yaml`'s `grafana.ini` comments for what was actually checked
+end-to-end doing this for real (including two real bugs it caught).
+
+## 6. Tear down
 
 ```bash
 helm uninstall shophub -n shophub
