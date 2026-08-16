@@ -13,6 +13,19 @@ jwt:
   #     --from-literal=SigningKey=<a real random key>
   existingSecret: shophub-jwt
 
+grafana:
+  # In-cluster Grafana Service DNS name — <kube-prometheus-stack release name>-grafana, in
+  # this release's own namespace. No public route exists (see kube-prometheus-stack.grafana
+  # below); shophub-app's /grafana-proxy route is the only way in.
+  baseUrl: "http://shophub-grafana.shophub.svc.cluster.local"
+  # Credentials from the one-time org/service-account bootstrap — see BOOTSTRAP.md. Real
+  # values are never committed here, same reasoning as database/jwt above:
+  #   kubectl create secret generic shophub-grafana-provisioning -n shophub \
+  #     --from-literal=AdminUser=admin \
+  #     --from-literal=AdminPassword=<the real admin password> \
+  #     --from-literal=ServiceAccountToken=<the "ShopHub Users" org service account token>
+  existingSecret: shophub-grafana-provisioning
+
 # kube-prometheus-stack.enabled is left unset (chart default: true).
 #
 # Cluster-level dashboards and alert rules (the "Observability: cluster-level dashboard" and
@@ -80,11 +93,43 @@ kube-prometheus-stack:
       auth.anonymous:
         enabled: false
 
-    # The "Optional" half of spec 4.1 — letting a ShopHub user reach *only* their own shop's
-    # Grafana dashboard — isn't implemented. It needs a real identity bridge between shophub-
-    # app's JWT auth and Grafana's own (OAuth proxy or similar, plus per-shop
-    # folders/permissions), which is a meaningfully bigger integration than this repo's job of
-    # pinning chart values — flagging it rather than half-building it.
+      # The "Optional" half of spec 4.1 — letting a ShopHub user reach *only* their own shop's
+      # Grafana dashboard. The identity bridge lives in shophub-app (GrafanaProvisioningService
+      # + the /grafana-proxy route, [auth.proxy]'s trusted counterpart) — this repo's job is
+      # just the Grafana-side config that trusts it and serves correctly from a sub-path:
+      #   - auth.proxy: Grafana signs a request in as whatever email arrives in the
+      #     X-WEBAUTH-USER header, auto-creating that Grafana user on first sight
+      #     (auto_sign_up). Safe *only* because nothing but shophub-app's own backend can ever
+      #     reach Grafana to set that header — no public Ingress exists (above), so there's no
+      #     path for anyone else to forge it.
+      #   - server.root_url / serve_from_sub_path: shophub-app mounts the proxy at a fixed
+      #     /grafana-proxy prefix (not a per-shop path — which shop(s) a viewer can actually
+      #     see is enforced by Grafana's own per-folder permissions, provisioned per shop by
+      #     GrafanaProvisioningService, not by anything in the proxy route itself). Grafana
+      #     needs to know about that prefix to generate correct asset/API links.
+      #
+      # Verified against a real cluster, through the actual shophub-app backend rather than
+      # hitting Grafana directly: registered a user, created a shop (provisions a folder +
+      # single-shop dashboard + owner-only folder permission in the dedicated "ShopHub Users"
+      # org), fetched GET /api/shop-sites/{id}/dashboard-link, and opened the URL it returned —
+      # got a real 200 with the Grafana dashboard shell, `<base href="/grafana-proxy/">`
+      # confirming the sub-path config took effect, for a *brand-new* Grafana account that had
+      # never logged in before. Caught two real bugs doing this the honest way instead of just
+      # wiring up config and assuming: Grafana dashboard uids cap at 40 characters (a naive
+      # "{shop}-overview" scheme went over); and a dashboard URL's `?orgId=` query param does
+      # *not* auto-switch a multi-org viewer's active org (confirmed: a fresh user got a 404
+      # fetching a dashboard in an org they were a member of but not currently "in") — the
+      # dashboard-link endpoint switches the owner's active org server-side, authenticated as
+      # them via the same X-WEBAUTH-USER trust, before ever handing back a URL.
+      server:
+        root_url: "https://shophub.example.com/grafana-proxy/"
+        serve_from_sub_path: true
+      "auth.proxy":
+        enabled: true
+        header_name: X-WEBAUTH-USER
+        header_property: username
+        auto_sign_up: true
+        sync_ttl: 60
 
     # The per-shop dashboard ("Observability: per-shop Grafana dashboard"): one dashboard,
     # templated by a $shop variable populated from live Prometheus data (kube_pod_labels),
