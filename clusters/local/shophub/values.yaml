@@ -378,13 +378,30 @@ kube-prometheus-stack:
         - name: shophub-shop-alerts
           rules:
             - alert: ShopTargetDown
-              expr: up{namespace="shops", job=~".*shophub-shops.*"} == 0
+              # up{...} == 0 alone doesn't catch a fully-down shop: with zero ready pods, the
+              # Service has no Endpoints, so the ServiceMonitor target disappears entirely
+              # instead of reporting up=0 — Prometheus has nothing to scrape, not something
+              # scraped-and-failing. Confirmed by actually scaling a shop to zero replicas and
+              # watching its `up` series vanish from /api/v1/query rather than go to 0. This
+              # uses kube-state-metrics' object-derived (not scrape-derived) replica status
+              # instead, which reports 0 regardless of whether there's anything left to scrape.
+              #
+              # Excludes by deployment name rather than joining on kube_deployment_labels: this
+              # chart's kube-state-metrics isn't configured with a label allowlist, so
+              # kube_deployment_labels carries no label_* fields to join on (confirmed empty
+              # against the real /metrics output) — shop-operator is the only other deployment
+              # in this namespace, so naming it directly is simpler and equally correct.
+              expr: |
+                label_replace(
+                  kube_deployment_status_replicas_available{namespace="shops", deployment!="shop-operator"},
+                  "service", "$1", "deployment", "(.*)"
+                ) == 0
               for: 5m
               labels:
                 severity: critical
               annotations:
                 summary: "Shop {{ $labels.service }} is unreachable"
-                description: "Prometheus has been unable to scrape shop '{{ $labels.service }}' for 5 minutes."
+                description: "Shop '{{ $labels.service }}' has had zero available replicas for 5 minutes."
             - alert: ShopHighErrorRate
               expr: |
                 (
