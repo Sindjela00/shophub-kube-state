@@ -47,6 +47,14 @@ grafana:
 # What *is* overridden below is sizing — the chart's own defaults assume enough headroom for
 # a real cluster, which a single-node local dev cluster doesn't have.
 kube-prometheus-stack:
+  # Without this, kube_pod_labels carries no label_* dimensions at all (confirmed empty against
+  # the real /metrics output) — the per-shop dashboard's CPU/Memory/Disk panels join
+  # container_*_usage metrics against kube_pod_labels{label_app_kubernetes_io_instance="$shop"}
+  # to scope them to one shop's pods, and that join silently returns nothing without this.
+  kube-state-metrics:
+    metricLabelsAllowlist:
+      - "pods=[app.kubernetes.io/instance,app.kubernetes.io/name]"
+
   prometheus:
     prometheusSpec:
       retention: 6h
@@ -171,7 +179,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"shops\", container!=\"\", container!=\"POD\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "cores"
                     }
                   ]
@@ -183,20 +191,25 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(container_memory_working_set_bytes{namespace=\"shops\", container!=\"\", container!=\"POD\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "expr": "sum(container_memory_working_set_bytes{namespace=\"shops\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "working set"
                     }
                   ]
                 },
                 {
-                  "id": 3, "type": "timeseries", "title": "Filesystem Usage",
+                  "id": 3, "type": "timeseries", "title": "Disk I/O",
                   "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
-                  "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+                  "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(container_fs_usage_bytes{namespace=\"shops\", container!=\"\", container!=\"POD\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
-                      "legendFormat": "used"
+                      "expr": "sum(rate(container_fs_reads_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "read"
+                    },
+                    {
+                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "expr": "sum(rate(container_fs_writes_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
+                      "legendFormat": "write"
                     }
                   ]
                 },
@@ -224,7 +237,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\"}[24h]))"
+                      "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\"}[24h]))"
                     }
                   ]
                 },
@@ -235,7 +248,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=~\"2..\"}[24h]))"
+                      "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=~\"2..\"}[24h]))"
                     }
                   ]
                 },
@@ -246,7 +259,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=~\"4..|5..\"}[24h]))"
+                      "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=~\"4..|5..\"}[24h]))"
                     }
                   ]
                 },
@@ -257,7 +270,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "max(http_traffic_unique_visitors_today{namespace=\"shops\", service=\"$shop\"})"
+                      "expr": "max({\"http.traffic.unique_visitors_today\", namespace=\"shops\", service=\"$shop\"})"
                     }
                   ]
                 },
@@ -268,7 +281,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum(increase(http_traffic_request_bytes_total{namespace=\"shops\", service=\"$shop\"}[24h]) + increase(http_traffic_response_bytes_total{namespace=\"shops\", service=\"$shop\"}[24h])) / 1e9"
+                      "expr": "sum(increase({\"http.traffic.request_bytes_total\", namespace=\"shops\", service=\"$shop\"}[24h]) + increase({\"http.traffic.response_bytes_total\", namespace=\"shops\", service=\"$shop\"}[24h])) / 1e9"
                     }
                   ]
                 },
@@ -279,7 +292,7 @@ kube-prometheus-stack:
                   "targets": [
                     {
                       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-                      "expr": "sum by (http_route) (increase(http_server_request_duration_seconds_count{namespace=\"shops\", service=\"$shop\", http_response_status_code=\"404\"}[24h]))",
+                      "expr": "sum by (\"http.route\") (increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=\"404\"}[24h]))",
                       "format": "table",
                       "instant": true
                     }
@@ -405,9 +418,9 @@ kube-prometheus-stack:
             - alert: ShopHighErrorRate
               expr: |
                 (
-                  sum by (service) (increase(http_server_request_duration_seconds_count{namespace="shops", http_response_status_code=~"5.."}[15m]))
+                  sum by (service) (increase({"http.server.request.duration_seconds_count", namespace="shops", "http.response.status_code"=~"5.."}[15m]))
                   /
-                  sum by (service) (increase(http_server_request_duration_seconds_count{namespace="shops"}[15m]))
+                  sum by (service) (increase({"http.server.request.duration_seconds_count", namespace="shops"}[15m]))
                 ) > 0.05
               for: 10m
               labels:
@@ -417,7 +430,7 @@ kube-prometheus-stack:
                 description: "More than 5% of requests to shop '{{ $labels.service }}' returned a 5xx status over the last 15 minutes."
             - alert: ShopHighLatency
               expr: |
-                histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket{namespace="shops"}[5m]))) > 1
+                histogram_quantile(0.95, sum by (service, le) (rate({"http.server.request.duration_seconds_bucket", namespace="shops"}[5m]))) > 1
               for: 10m
               labels:
                 severity: warning
