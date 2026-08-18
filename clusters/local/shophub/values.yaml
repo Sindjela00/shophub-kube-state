@@ -167,7 +167,7 @@ kube-prometheus-stack:
                   {
                     "name": "shop",
                     "type": "query",
-                    "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                    "datasource": { "type": "prometheus", "uid": "prometheus" },
                     "query": "label_values(kube_pod_labels{namespace=\"shops\"}, label_app_kubernetes_io_instance)",
                     "refresh": 2,
                     "includeAll": false,
@@ -183,7 +183,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "cores"
                     }
@@ -195,7 +195,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(container_memory_working_set_bytes{namespace=\"shops\"} * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "working set"
                     }
@@ -207,12 +207,12 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(rate(container_fs_reads_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "read"
                     },
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(rate(container_fs_writes_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "write"
                     }
@@ -224,12 +224,12 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "receive"
                     },
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"shops\"}[5m]) * on(namespace,pod) group_left() kube_pod_labels{namespace=\"shops\", label_app_kubernetes_io_instance=\"$shop\"})",
                       "legendFormat": "transmit"
                     }
@@ -241,7 +241,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\"}[24h]))"
                     }
                   ]
@@ -252,7 +252,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=~\"2..\"}[24h]))"
                     }
                   ]
@@ -263,7 +263,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=~\"4..|5..\"}[24h]))"
                     }
                   ]
@@ -274,7 +274,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "max({\"http.traffic.unique_visitors_today\", namespace=\"shops\", service=\"$shop\"})"
                     }
                   ]
@@ -285,7 +285,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": { "unit": "decgbytes" }, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum(increase({\"http.traffic.request_bytes_total\", namespace=\"shops\", service=\"$shop\"}[24h]) + increase({\"http.traffic.response_bytes_total\", namespace=\"shops\", service=\"$shop\"}[24h])) / 1e9"
                     }
                   ]
@@ -296,7 +296,7 @@ kube-prometheus-stack:
                   "fieldConfig": { "defaults": {}, "overrides": [] },
                   "targets": [
                     {
-                      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
                       "expr": "sum by (\"http.route\") (increase({\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"$shop\", \"http.response.status_code\"=\"404\"}[24h]))",
                       "format": "table",
                       "instant": true
@@ -330,6 +330,45 @@ kube-prometheus-stack:
   # (this release brings it); shop-operator installs first per BOOTSTRAP.md and has no dependency
   # on kube-prometheus-stack being present at all.
   extraManifests:
+    # Grafana datasources are per-org, and kube-prometheus-stack's own datasource provisioning
+    # (the "shophub-kube-prometheus-st-grafana-datasource" ConfigMap it generates) targets only
+    # the default org (org 1) — it has no orgId field at all. Every per-shop dashboard
+    # (shophub-app's GrafanaProvisioningService) lives in org 2 ("ShopHub Users") instead, since
+    # it's created there via an org-scoped service account — so without this, org 2 has zero
+    # datasources and every panel in every per-shop dashboard fails with "Datasource Prometheus
+    # not found", confirmed for real. Same uids/URLs as the org-1 ConfigMap, picked up by the
+    # same sidecar (grafana_datasource: "1" label), just with orgId: 2 added.
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: shophub-grafana-datasource-org2
+        namespace: shophub
+        labels:
+          grafana_datasource: "1"
+      data:
+        org2-datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: "Prometheus"
+              type: prometheus
+              uid: prometheus
+              orgId: 2
+              url: http://shophub-kube-prometheus-st-prometheus.shophub:9090/
+              access: proxy
+              isDefault: true
+              jsonData:
+                httpMethod: POST
+                timeInterval: 30s
+            - name: "Alertmanager"
+              type: alertmanager
+              uid: alertmanager
+              orgId: 2
+              url: http://shophub-kube-prometheus-st-alertmanager.shophub:9093/
+              access: proxy
+              jsonData:
+                handleGrafanaManagedAlerts: false
+                implementation: prometheus
+
     - apiVersion: monitoring.coreos.com/v1
       kind: ServiceMonitor
       metadata:
