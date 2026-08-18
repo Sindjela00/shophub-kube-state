@@ -18,6 +18,14 @@ kubernetes:
   # confirmed live, not assumed. ShopSiteUrlService uses this to build a shop's "Open site" URL.
   externalHost: localhost
 
+discord:
+  # Public (not secret) — the bot application's Discord client id, baked into every shop
+  # owner's invite link. Left empty until there's a real Discord application to point at; the
+  # onboarding endpoints work either way, an empty clientId just makes an unusable invite URL.
+  # botTokenSecretName/botTokenSecretKey are left at the chart's own defaults (they already
+  # match shop-operator.discord.existingSecret above).
+  clientId: ""
+
 grafana:
   # In-cluster Grafana Service DNS name — <kube-prometheus-stack release name>-grafana, in
   # this release's own namespace. No public route exists (see kube-prometheus-stack.grafana
@@ -395,35 +403,31 @@ kube-prometheus-stack:
             path: /metrics
             interval: 30s
 
-    # One real, working example of alert-to-Discord routing for a single shop, wired to the
-    # webhook Secret shophub-shop-operator's DiscordChannel controller creates
-    # (`<DiscordChannel CR name>-discord-webhook`, key `webhookUrl` — same name as the owning
-    # Shop CR, see above). AlertmanagerConfig objects are inherently per-receiver/per-secret, so
-    # this can't be made to cover arbitrary future shops without something watching
-    # Shop/DiscordChannel resources and generating one of these per shop — a real but
-    # meaningfully bigger feature (effectively a small controller) that's out of scope here.
-    #
-    # To route another shop's alerts to its own channel: copy this whole object, replace every
-    # "example-shop" below with that shop's actual CR name, and apply. Both webhookConfigs
-    # `apiURL.name` and the route's `service` matcher must use that same name.
-    - apiVersion: monitoring.coreos.com/v1alpha1
-      kind: AlertmanagerConfig
+    - apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
       metadata:
-        name: example-shop-discord-routing
-        namespace: shops
+        name: shophub-app
+        namespace: shophub
+        labels:
+          release: shophub
       spec:
-        route:
-          receiver: example-shop-discord
-          matchers:
-            - name: service
-              value: example-shop
-              matchType: "="
-        receivers:
-          - name: example-shop-discord
-            discordConfigs:
-              - apiURL:
-                  name: example-shop-discord-webhook
-                  key: webhookUrl
+        namespaceSelector:
+          matchNames:
+            - shophub
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: shophub
+        endpoints:
+          - port: http
+            path: /metrics
+            interval: 30s
+
+    # Alert-to-Discord routing (one AlertmanagerConfig per DiscordChannel, matcher
+    # `service=<DiscordChannel CR name>`, wired to that channel's own `<name>-discord-webhook`
+    # Secret) is no longer hand-maintained here — shophub-shop-operator's
+    # DiscordChannelReconciler generates it automatically for every DiscordChannel CR, shops and
+    # the shophub-app platform channel alike, the moment its webhook exists. See that repo's
+    # reconcileAlertmanagerConfig.
 
   # Alert rules are the mirror image of the routing above: these ARE genuinely N-shop-scalable
   # without enumeration, since Prometheus groups `by (service)` — a distinct alert fires per shop
@@ -481,3 +485,28 @@ kube-prometheus-stack:
               annotations:
                 summary: "Shop {{ $labels.service }} has high request latency"
                 description: "The 95th percentile request duration for shop '{{ $labels.service }}' has been above 1s for 10 minutes."
+    # shophub-app's own alerting — routed to the static platform DiscordChannel CR (name
+    # "shophub-app", see shop-operator/values.yaml's discord.platformChannelName), same
+    # auto-generated-AlertmanagerConfig mechanism as every shop's own alerts.
+    shophub-app-alerts:
+      groups:
+        - name: shophub-app-alerts
+          rules:
+            - alert: ShopHubAppTargetDown
+              # Same "zero available replicas, not scrape-derived up==0" reasoning as
+              # ShopTargetDown above. shophub is the only Deployment in this namespace (release
+              # name "shophub" — see helm.yaml — makes shophub.fullname just "shophub"), so no
+              # exclusion logic is needed. "service" is set to the literal "shophub-app" (not
+              # derived from the deployment name) to match the platform DiscordChannel CR's own
+              # name, which is what its auto-generated AlertmanagerConfig's matcher uses.
+              expr: |
+                label_replace(
+                  kube_deployment_status_replicas_available{namespace="shophub", deployment="shophub"},
+                  "service", "shophub-app", "namespace", "(.*)"
+                ) == 0
+              for: 5m
+              labels:
+                severity: critical
+              annotations:
+                summary: "ShopHub platform is unreachable"
+                description: "shophub-app has had zero available replicas for 5 minutes."
