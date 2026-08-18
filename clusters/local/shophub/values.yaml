@@ -13,6 +13,11 @@ jwt:
   #     --from-literal=SigningKey=<a real random key>
   existingSecret: shophub-jwt
 
+kubernetes:
+  # Docker Desktop's Kubernetes maps every Service's NodePort onto the host's own loopback —
+  # confirmed live, not assumed. ShopSiteUrlService uses this to build a shop's "Open site" URL.
+  externalHost: localhost
+
 grafana:
   # In-cluster Grafana Service DNS name — <kube-prometheus-stack release name>-grafana, in
   # this release's own namespace. No public route exists (see kube-prometheus-stack.grafana
