@@ -7,3 +7,6 @@ discord:
   #   kubectl create secret generic shop-operator-discord -n shops \
   #     --from-literal=DISCORD_BOT_TOKEN=<token> --from-literal=DISCORD_GUILD_ID=<guild-id>
   existingSecret: shop-operator-discord
+  # shophub-app's own platform-level alert channel — created in the default guild above (no
+  # per-shop onboarding needed for this one, there's only ever one).
+  platformChannelName: shophub-app-alerts
