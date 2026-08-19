@@ -10,3 +10,13 @@ discord:
   # shophub-app's own platform-level alert channel — created in the default guild above (no
   # per-shop onboarding needed for this one, there's only ever one).
   platformChannelName: shophub-app-alerts
+
+# Without this, the operator's controller falls back to its own hardcoded default
+# (ghcr.io/sindjela00/shophub-shop:latest — not publicly pullable), so every Shop it
+# reconciles sits in ImagePullBackOff forever. `<repo>:local`, same convention
+# dev-env/start-environment.sh already uses for the shophub-app and shop-operator images it
+# builds locally (shophub-app:local, shophub-shop-operator:local) — that script also builds
+# shophub-shop:local the same way and passes it via --set, but setting it here too means a
+# plain `helm upgrade --install -f clusters/local/shop-operator/values.yaml` (no extra --set
+# flags, e.g. following BOOTSTRAP.md by hand) still works on its own.
+shopImage: shophub-shop:local
