@@ -52,6 +52,14 @@ kubectl create secret generic shophub-jwt -n shophub \
 operator runs fine without it, `DiscordChannel` reconciliation just won't succeed until it
 exists.)
 
+`DISCORD_GUILD_ID` here is a *default* guild, not the only one — it's what shophub-app's own
+platform alert channel (`shop-operator/values.yaml`'s `discord.platformChannelName`) uses, and
+what any shop that hasn't attached its own server yet falls back to. A shop owner can invite the
+bot to their own server and attach it there instead (shophub-app's per-shop Discord onboarding
+flow) without touching this secret. For the invite-link flow to actually produce a usable link,
+`shophub/values.yaml`'s `discord.clientId` also needs to be set to that same bot application's
+real (public, not secret) client id.
+
 `shophub-database` needs a real reachable Postgres — nothing in this repo stands one up. For
 local testing, `docker compose up -d` in `shophub-app` and use
 `Host=host.docker.internal;Port=5433;...` so the in-cluster pod can reach a container running
