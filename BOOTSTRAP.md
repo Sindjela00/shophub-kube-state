@@ -94,6 +94,12 @@ is a known, separate gap. Point `--set image.repository=... --set image.tag=...`
 built image (`docker build` in that repo, `imagePullPolicy: Never`) to verify the rest for
 real in the meantime — see that repo's own chart PR for exactly this being done.
 
+Separately, `clusters/local/shop-operator/values.yaml` already sets `shopImage:
+shophub-shop:local` — that's the image the operator puts on every *Shop* Deployment it
+reconciles (not its own image, see above), and it needs a matching locally built
+`shophub-shop:local` image (`docker build` in that repo, same `imagePullPolicy: Never`
+reasoning) or every Shop sits in `ImagePullBackOff` too.
+
 ## 4. Install shophub
 
 ```bash
@@ -127,6 +133,12 @@ and a service account scoped to it — neither can be created declaratively (Gra
 for "provision this at install time" the way a chart value can), so this is a one-time manual
 step per cluster, same spirit as the database/JWT secrets in step 2.
 
+This org's datasources (Prometheus + Alertmanager, so per-shop dashboard panels can actually
+query something) are provisioned here too, via the same API calls, rather than as a static
+`extraManifests` ConfigMap — see `clusters/local/shophub/values.yaml`'s `extraManifests`
+comment for why a ConfigMap live from Grafana's first boot, targeting an org that doesn't
+exist until this very step runs, deadlocks Grafana entirely.
+
 ```bash
 # The chart sets a random admin password unless overridden — read the real one out.
 GRAFANA_ADMIN_PASSWORD=$(kubectl get secret shophub-grafana -n shophub \
@@ -140,6 +152,25 @@ kubectl port-forward -n shophub svc/shophub-grafana 3000:80 &
 ORG_ID=$(curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/orgs \
   -H "Content-Type: application/json" -d '{"name":"ShopHub Users"}' | jq -r .orgId)
 curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST "http://localhost:3000/api/user/using/$ORG_ID"
+
+# Datasources for this org — same uids/URLs shophub-app's per-shop dashboard JSON already
+# expects (datasource uid: "prometheus" / "alertmanager"), just scoped to org 2 instead of
+# the default org kube-prometheus-stack's own ConfigMap already provisions into.
+curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/datasources \
+  -H "Content-Type: application/json" -d '{
+    "name": "Prometheus", "type": "prometheus", "uid": "prometheus",
+    "url": "http://shophub-kube-prometheus-st-prometheus.shophub:9090/",
+    "access": "proxy", "isDefault": true,
+    "jsonData": {"httpMethod": "POST", "timeInterval": "30s"}
+  }'
+curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/datasources \
+  -H "Content-Type: application/json" -d '{
+    "name": "Alertmanager", "type": "alertmanager", "uid": "alertmanager",
+    "url": "http://shophub-kube-prometheus-st-alertmanager.shophub:9093/",
+    "access": "proxy",
+    "jsonData": {"handleGrafanaManagedAlerts": false, "implementation": "prometheus"}
+  }'
+
 SA_ID=$(curl -s -u "admin:$GRAFANA_ADMIN_PASSWORD" -X POST http://localhost:3000/api/serviceaccounts \
   -H "Content-Type: application/json" \
   -d '{"name":"shophub-backend","role":"Admin"}' | jq -r .id)

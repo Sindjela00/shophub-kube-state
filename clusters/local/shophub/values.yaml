@@ -88,10 +88,30 @@ kube-prometheus-stack:
           memory: 64Mi
 
   grafana:
-    # Ephemeral local dev cluster — dashboards/rules are all provisioned from the chart on
-    # every install anyway, nothing user-created is worth persisting here.
+    # NOT ephemeral, on purpose — unlike dashboards/rules (which really are all provisioned
+    # from the chart on every install, and would be fine to lose), Grafana's own sqlite/org/user
+    # database also lives on this volume, and that database is NOT reprovisionable: it's what
+    # holds the "ShopHub Users" org (org 2) that the startup bootstrap creates via a one-time
+    # Grafana API call (BOOTSTRAP.md step 5 / dev-env/start-environment.sh), plus every
+    # per-shop folder/dashboard/permission shophub-app's GrafanaProvisioningService creates
+    # under it afterwards. With `enabled: false` (emptyDir), ANY pod restart — not just a
+    # fresh install — wiped that database, so org 2 stopped existing while the
+    # `shophub-grafana-datasource-org2` ConfigMap below (before it was removed, see the
+    # extraManifests comment) still unconditionally provisioned a datasource into org 2 on
+    # every boot; Grafana's provisioning is fail-fast (no supported way to make one bad entry
+    # non-fatal — see that comment), so the whole process crash-looped
+    # (`org.notFound: failed to get org by ID: 2`) until someone manually deleted the
+    # ConfigMap, let Grafana come up clean, and redid the org bootstrap by hand. A real PVC
+    # fixes that: org 2 and everything under it now survives node drains, OOM kills, image
+    # updates, and routine `kubectl rollout restart`, so only the very first install still
+    # needs the one-time bootstrap. No storageClassName pinned — nothing else in this repo
+    # pins one either (Prometheus's own storageSpec is left at the chart default too), so this
+    # rides Docker Desktop's (or whichever local distro's) default StorageClass same as
+    # everything else here. 1Gi is generous for a handful of orgs/users/service-accounts;
+    # dashboards/folders/permissions are comparatively tiny rows, not blobs.
     persistence:
-      enabled: false
+      enabled: true
+      size: 1Gi
     resources:
       requests:
         cpu: 50m
@@ -346,40 +366,42 @@ kube-prometheus-stack:
     # (the "shophub-kube-prometheus-st-grafana-datasource" ConfigMap it generates) targets only
     # the default org (org 1) — it has no orgId field at all. Every per-shop dashboard
     # (shophub-app's GrafanaProvisioningService) lives in org 2 ("ShopHub Users") instead, since
-    # it's created there via an org-scoped service account — so without this, org 2 has zero
-    # datasources and every panel in every per-shop dashboard fails with "Datasource Prometheus
-    # not found", confirmed for real. Same uids/URLs as the org-1 ConfigMap, picked up by the
-    # same sidecar (grafana_datasource: "1" label), just with orgId: 2 added.
-    - apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: shophub-grafana-datasource-org2
-        namespace: shophub
-        labels:
-          grafana_datasource: "1"
-      data:
-        org2-datasources.yaml: |
-          apiVersion: 1
-          datasources:
-            - name: "Prometheus"
-              type: prometheus
-              uid: prometheus
-              orgId: 2
-              url: http://shophub-kube-prometheus-st-prometheus.shophub:9090/
-              access: proxy
-              isDefault: true
-              jsonData:
-                httpMethod: POST
-                timeInterval: 30s
-            - name: "Alertmanager"
-              type: alertmanager
-              uid: alertmanager
-              orgId: 2
-              url: http://shophub-kube-prometheus-st-alertmanager.shophub:9093/
-              access: proxy
-              jsonData:
-                handleGrafanaManagedAlerts: false
-                implementation: prometheus
+    # it's created there via an org-scoped service account — so org 2 needs its own "Prometheus"
+    # / "Alertmanager" datasources (same uids/URLs as the org-1 ConfigMap, just with orgId: 2
+    # added) or every panel in every per-shop dashboard fails with "Datasource Prometheus not
+    # found", confirmed for real.
+    #
+    # This USED to be a static `shophub-grafana-datasource-org2` ConfigMap here, picked up by
+    # the chart's file-provisioning sidecar (grafana_datasource: "1" label) — removed on
+    # purpose, not an oversight. Org 2 itself only exists once the startup bootstrap creates it
+    # via a one-time Grafana API call (BOOTSTRAP.md step 5 / dev-env/start-environment.sh),
+    # *after* confirming Grafana is up and healthy — but a static ConfigMap is live from
+    # Grafana's very first boot, before that bootstrap can possibly have run. Grafana's file
+    # provisioning validates the target org exists and is fail-fast: an unresolvable orgId
+    # doesn't skip that one entry, it takes down the whole provisioning module — and Grafana's
+    # HTTP server never starts until provisioning finishes — confirmed for real
+    # (`org.notFound: failed to get org by ID: 2`) and against upstream issues describing the
+    # same fail-fast validation (e.g. grafana/grafana#20502, #44243). Checked for an escape
+    # hatch before deciding to remove this instead of trying to patch around it: the pinned
+    # Grafana version here is 13.1.3 (kube-prometheus-stack 88.3.0's grafana subchart
+    # appVersion) and its own provisioning docs document no "tolerate missing org" flag, and no
+    # org-name-lookup alternative to numeric orgId for datasources (org_name exists for *plugin*
+    # provisioning only, not datasources) — so there's no supported way to make this one entry
+    # soft-fail. Since Grafana now has real persistent storage (this file's
+    # `persistence.enabled: true` above), the org that used to get wiped on every restart
+    # survives from then on — but the very first boot, before that org exists at all, would
+    # still crash-loop forever if this ConfigMap were still here, since nothing could ever make
+    # the HTTP API come up to run the bootstrap that creates the org in the first place.
+    #
+    # The fix is to stop provisioning this datasource statically at all: the same bootstrap
+    # flow that creates org 2 (BOOTSTRAP.md step 5 / dev-env/start-environment.sh) must also
+    # `POST /api/datasources` (Prometheus + Alertmanager, same fields as the removed ConfigMap
+    # above) while authenticated into org 2, right after creating it. BOOTSTRAP.md step 5 has
+    # been updated to do this by hand; dev-env/start-environment.sh's automated bootstrap needs
+    # the equivalent follow-up call (out of scope for this repo — that script lives outside it).
+    # If a future editor is tempted to re-add a static org-2 datasource ConfigMap: don't, for
+    # exactly the reasons above — it will deadlock again the moment anyone tests a truly clean
+    # first install.
 
     - apiVersion: monitoring.coreos.com/v1
       kind: ServiceMonitor
