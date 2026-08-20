@@ -22,9 +22,13 @@ discord:
   # Public (not secret) — the bot application's Discord client id, baked into every shop
   # owner's invite link. Left empty until there's a real Discord application to point at; the
   # onboarding endpoints work either way, an empty clientId just makes an unusable invite URL.
-  # botTokenSecretName/botTokenSecretKey are left at the chart's own defaults (they already
-  # match shop-operator.discord.existingSecret above).
   clientId: ""
+  # This chart owns the bot token/guild ID now (shop-operator's own DiscordChannelReconciler
+  # reads this same Secret live, cross-namespace — see its values.yaml's discord section). Real
+  # values are never committed here, same reasoning as database/jwt above:
+  #   kubectl create secret generic shophub-discord -n shophub \
+  #     --from-literal=DISCORD_BOT_TOKEN=<token> --from-literal=DISCORD_GUILD_ID=<guild-id>
+  existingSecret: shophub-discord
 
 grafana:
   # In-cluster Grafana Service DNS name — <kube-prometheus-stack release name>-grafana, in
