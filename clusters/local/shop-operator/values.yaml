@@ -3,10 +3,11 @@
 # repeat them here).
 
 discord:
-  # The real bot token/guild ID are never committed here. Create the secret out-of-band first:
-  #   kubectl create secret generic shop-operator-discord -n shops \
-  #     --from-literal=DISCORD_BOT_TOKEN=<token> --from-literal=DISCORD_GUILD_ID=<guild-id>
-  existingSecret: shop-operator-discord
-  # shophub-app's own platform-level alert channel — created in the default guild above (no
-  # per-shop onboarding needed for this one, there's only ever one).
+  # secretNamespace/secretName/secretBotTokenKey/secretGuildIdKey are left at the chart's own
+  # defaults ("shophub"/"shophub-discord"/DISCORD_BOT_TOKEN/DISCORD_GUILD_ID) — they already
+  # match the shophub chart's own computed default Secret name given this cluster's release name
+  # (see clusters/local/shophub/values.yaml's discord section, which is where the real bot
+  # token/guild ID actually get configured now — this chart no longer owns that credential).
+  # shophub-app's own platform-level alert channel — created in the default guild (no per-shop
+  # onboarding needed for this one, there's only ever one).
   platformChannelName: shophub-app-alerts
