@@ -20,6 +20,27 @@ workspace/
 └── shophub-helm-charts/
 ```
 
+### Database operators
+
+shop-operator provisions each shop's database by creating a custom resource — a CloudNativePG
+`Cluster` for the `standard` tier, a `Redis` for the `light` tier — so the operator that owns
+each CRD has to already be installed. Neither is part of the two Helm releases below, and
+neither is optional for the tier it backs: without CNPG a `standard` shop's pod sits in
+`CreateContainerConfigError` forever, waiting on a database Secret nothing will ever create.
+
+```bash
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg --namespace cnpg-system --create-namespace cnpg/cloudnative-pg
+
+helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/
+helm upgrade --install redis-operator --namespace ot-operators --create-namespace ot-helm/redis-operator
+```
+
+These live outside the cluster state this repo manages, so anything that resets the cluster
+itself — including a Docker Desktop factory reset or a `wsl --shutdown` that takes its
+Kubernetes VM with it — removes them, and shop creation starts failing in a way that looks
+like an operator bug rather than a missing prerequisite. Re-run the two commands above.
+
 ## 1. Verify cluster access
 
 ```bash
